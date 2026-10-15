@@ -169,40 +169,51 @@ safety net. Actions run the CLI, which auto-starts the daemon if needed
 - The daemon holds an exclusive lock, so only one instance ever owns the
   Bluetooth link; `omarchy-hue stop` waits for it to exit before returning.
 
-## Packaging, git, and redeploy
+## Project layout, git, and redeploy
 
-The plugin directory is already a complete, self-contained project (manifest
-at the root), and that is exactly the layout `omarchy plugin add` expects — so
-it can be a git repo directly.
+The source of truth is the project directory `~/Projects/mylonz-hue`; the
+Omarchy plugin directory is a deployed copy. `deploy.sh` rsyncs the project
+into place and nudges the shell to reload.
 
-Version it:
+```
+~/Projects/mylonz-hue/                  git repo — edit here
+    Panel.qml  manifest.json
+    daemon/  bin/  install.sh
+    deploy.sh  watch.sh  Makefile
+        |  ./deploy.sh   (or `make deploy` / `make watch`)
+        v
+~/.config/omarchy/plugins/mylonz.hue/   deployed copy the shell loads
+```
+
+Common commands:
 
 ```bash
-cd ~/.config/omarchy/plugins/mylonz.hue
-git init -b main
-git add -A
-git commit -m "Hue Bluetooth plugin"
-git remote add origin git@github.com:<you>/mylonz-hue.git
-git push -u origin main
+make deploy     # copy into the plugin dir + reload the shell
+make watch      # deploy on every save (Ctrl-C to stop)
+make install    # deploy, then build the venv and ~/.local/bin shims
+make enable     # deploy, then enable the bar widget
+make status     # show the plugin's registration
 ```
 
 Intentionally not committed: `__pycache__/`, the venv, this machine's
 `~/.config/omarchy/hue.json`, and runtime state. They live outside the plugin
 directory or are covered by `.gitignore`.
 
-Redeploy on another machine:
+Push it and redeploy elsewhere:
 
 ```bash
-omarchy plugin add https://github.com/<you>/mylonz-hue.git --enable
+cd ~/Projects/mylonz-hue
+git remote add origin git@github.com:<you>/mylonz-hue.git
+git push -u origin main
+
+# on the other machine:
+omarchy plugin add https://github.com/<you>/mylonz-hue.git --enable --yes
 cd ~/.config/omarchy/plugins/mylonz.hue && ./install.sh
 omarchy-hue pair <ADDRESS> "<Name>"     # or the popup's "Pair a light…" section
 ```
 
-That machine pairs the bulb once (see
-[Pairing](#pairing-the-bulb-first-time-only)). Update later with
-`omarchy plugin update mylonz.hue`.
-
-If you would rather keep the source outside a config directory, develop in
-e.g. `~/Work/mylonz-hue/` and copy it into
-`~/.config/omarchy/plugins/mylonz.hue/`; the shell hot-reloads on save either
-way.
+`omarchy plugin add` checks the repo out under the manifest id, so it always
+lands at `.../plugins/mylonz.hue/`. That machine pairs the bulb once (see
+[Pairing](#pairing-the-bulb-first-time-only)). Afterwards, update your own
+machine with `git pull && make deploy` in the project, or a machine that
+installed it directly with `omarchy plugin update mylonz.hue`.
