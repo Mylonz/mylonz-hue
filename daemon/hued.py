@@ -123,6 +123,11 @@ class Bulb:
         self._lock = asyncio.Lock()
         self._last_use = 0.0
         self._synced_once = False
+        # The bulb's effect characteristic keeps reporting the last effect even
+        # after a static brightness/temperature write has stopped it, so the
+        # selected effect is our intent, not the (stale) reported value.
+        self.effect_intent: str | None = None
+        self.effect_known = False
         self.state = {
             "id": self.id,
             "address": self.address,
@@ -193,11 +198,19 @@ class Bulb:
             xy = light.colour_xy
             s["xy"] = [round(xy[0], 4), round(xy[1], 4)] if xy else None
             effect = light.effect
-            if effect:
-                s["effect"] = effect[0].name if effect[0] else None
-                s["effectSpeed"] = effect[1]
+            reported = effect[0].name if effect and effect[0] else None
+            if not self.effect_known:
+                # Adopt whatever the bulb was already doing, once.
+                if reported and reported != "NONE":
+                    self.effect_intent = reported
+                self.effect_known = True
+            if self.effect_intent:
+                s["effect"] = self.effect_intent
+                if effect and effect[1]:
+                    s["effectSpeed"] = effect[1]
             else:
                 s["effect"] = None
+                s["effectSpeed"] = None
             s["colourMode"] = "temp" if light.colour_temp_mode else "xy"
             s["model"] = light.model or s["model"]
             s["firmware"] = light.firmware
@@ -346,32 +359,100 @@ class Bulb:
             else:
                 on = bool(value)
             await light.set_power(on)
-        if "brightness" in fields:
-            await light.set_brightness(int(fields["brightness"]))
-        if "mireds" in fields:
-            await light.set_colour_temp(int(fields["mireds"]))
-        if "kelvin" in fields:
-            await light.set_colour_temp(core.kelvin_to_mireds(fields["kelvin"]))
-        if "xy" in fields and fields["xy"]:
-            x, y = fields["xy"]
-            await light.set_colour_xy(float(x), float(y))
-        if "hex" in fields:
-            x, y = core.hex_to_xy(fields["hex"])
-            await light.set_colour_xy(x, y)
+
+        # While an effect is running, changing brightness or colour through the
+        # individual characteristics stops it. Route those tweaks through the
+        # combined effect write instead, so the effect keeps running with the
+        # new base values.
+        active_effect = None
+        if "effect" not in fields:
+            current = self.state.get("effect")
+            if current and str(current).upper() not in ("NONE", "OFF", "CLEAR"):
+                active_effect = str(current).upper()
+
+        if active_effect and any(
+            key in fields for key in ("brightness", "mireds", "kelvin", "xy", "hex")
+        ):
+            await self._apply_with_effect_locked(light, fields, active_effect)
+        else:
+            if "brightness" in fields:
+                await light.set_brightness(int(fields["brightness"]))
+            if "mireds" in fields:
+                await light.set_colour_temp(int(fields["mireds"]))
+            if "kelvin" in fields:
+                await light.set_colour_temp(core.kelvin_to_mireds(fields["kelvin"]))
+            if "xy" in fields and fields["xy"]:
+                x, y = fields["xy"]
+                await light.set_colour_xy(float(x), float(y))
+            if "hex" in fields:
+                x, y = core.hex_to_xy(fields["hex"])
+                await light.set_colour_xy(x, y)
+
         if "effect" in fields:
             await self._apply_effect_locked(light, fields)
+
+    async def _clear_effect_locked(self, light, fields: dict) -> None:
+        """Stop a running effect.
+
+        Writing the static temperature characteristic halts the animation.
+        (The bulb keeps reporting the old effect id on the effects
+        characteristic, which is why `effect_intent` drives what we show.)
+        """
+        if "mireds" in fields:
+            temp = int(fields["mireds"])
+        elif "kelvin" in fields:
+            temp = core.kelvin_to_mireds(fields["kelvin"])
+        else:
+            temp = int(light.colour_temp or 366)
+        await light.set_colour_temp(temp)
+
+    async def _apply_with_effect_locked(
+        self, light, fields: dict, active_effect: str
+    ) -> None:
+        """Adjust brightness/colour without stopping a running effect."""
+        from HueBLE import EffectType  # type: ignore
+
+        try:
+            effect = EffectType[active_effect]
+        except KeyError:
+            return
+        speed = max(
+            1, min(254, int(fields.get("speed") or self.state.get("effectSpeed") or 128))
+        )
+        brightness = int(fields.get("brightness") or light.brightness or 128)
+        colour = None
+        if "xy" in fields and fields["xy"]:
+            colour = (float(fields["xy"][0]), float(fields["xy"][1]))
+        elif "hex" in fields:
+            colour = core.hex_to_xy(fields["hex"])
+        if colour is not None:
+            await light.set_colour_effect(
+                colour[0], colour[1], brightness, effect, speed
+            )
+            return
+        if "mireds" in fields:
+            temp = int(fields["mireds"])
+        elif "kelvin" in fields:
+            temp = core.kelvin_to_mireds(fields["kelvin"])
+        else:
+            temp = int(light.colour_temp or 366)
+        await light.set_temperature_effect(temp, brightness, effect, speed)
 
     async def _apply_effect_locked(self, light, fields: dict) -> None:
         from HueBLE import EffectType  # type: ignore
 
         raw = str(fields.get("effect") or "NONE").upper()
         if raw in ("NONE", "OFF", "CLEAR", ""):
-            effect = EffectType.NONE
-        else:
-            try:
-                effect = EffectType[raw]
-            except KeyError as exc:
-                raise ValueError(f"unknown effect {raw!r}") from exc
+            await self._clear_effect_locked(light, fields)
+            self.effect_intent = None
+            self.effect_known = True
+            return
+        try:
+            effect = EffectType[raw]
+        except KeyError as exc:
+            raise ValueError(f"unknown effect {raw!r}") from exc
+        self.effect_intent = raw
+        self.effect_known = True
         speed = max(1, min(254, int(fields.get("speed", 128) or 128)))
         brightness = int(fields.get("brightness") or light.brightness or 128)
         xy = light.colour_xy

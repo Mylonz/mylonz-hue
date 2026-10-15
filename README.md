@@ -190,6 +190,11 @@ safety net. Actions run the CLI, which auto-starts the daemon if needed
 - Effect speed is Hue's `effect_speed` (0–254); the panel shows it as a
   percentage and only while an effect is active. Switching effect chips keeps
   the current speed.
+- Adjusting brightness or colour temperature while an effect is running keeps
+  the effect: the daemon re-sends it through the combined effect write instead
+  of the static characteristic (which would stop it). Selecting **None** stops
+  it. The bulb keeps reporting the last effect even after it has stopped, so
+  the plugin tracks the chosen effect itself rather than trusting that read.
 - The daemon holds an exclusive lock, so only one instance ever owns the
   Bluetooth link; `omarchy-hue stop` waits for it to exit before returning.
 
