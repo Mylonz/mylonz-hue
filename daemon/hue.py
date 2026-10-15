@@ -224,7 +224,38 @@ def cmd_stop(args) -> int:
 
 
 def cmd_effects(args) -> int:
-    print("\n".join(EFFECTS))
+    if not args.id:
+        print("\n".join(EFFECTS))
+        return 0
+    state = call({"cmd": "state"})["state"]
+    needle = args.id.upper()
+    bulb = next(
+        (
+            b
+            for b in state.get("bulbs", [])
+            if b["id"].upper() == needle or b["address"].upper() == needle
+        ),
+        None,
+    )
+    if bulb is None:
+        return fail(f"unknown bulb {args.id!r}")
+    allow = (bulb.get("capabilities") or {}).get("effectList")
+    if allow:
+        for name in allow:
+            print(name.lower())
+    else:
+        print("# not pinned - full catalogue offered:")
+        print("\n".join(EFFECTS))
+    return 0
+
+
+def cmd_effects_probe(args) -> int:
+    reply = call({"cmd": "probe-effects", "id": args.id}, timeout=1200)
+    results = reply.get("results") or {}
+    for name, ok in results.items():
+        print(f"{'ok  ' if ok else 'fail'}  {name.lower()}")
+    allow = (reply.get("bulb", {}).get("capabilities") or {}).get("effectList")
+    print("effects-set:", " ".join(e.lower() for e in allow) if allow else "(all)")
     return 0
 
 
@@ -290,8 +321,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("stop", help="stop the daemon")
     p.set_defaults(func=cmd_stop)
 
-    p = sub.add_parser("effects", help="list effect names")
+    p = sub.add_parser("effects", help="list effect names, or a bulb's effects")
+    p.add_argument("id", nargs="?", help="bulb id or address; omit for the catalogue")
     p.set_defaults(func=cmd_effects)
+
+    p = sub.add_parser(
+        "effects-probe", help="test every effect against a bulb and record the ones it accepts"
+    )
+    p.add_argument("id")
+    p.set_defaults(func=cmd_effects_probe)
 
     p = sub.add_parser(
         "effects-set", help="limit a bulb to the effects it actually supports"

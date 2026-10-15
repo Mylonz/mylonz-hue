@@ -379,6 +379,40 @@ class Bulb:
             temp = light.colour_temp or 366
             await light.set_temperature_effect(temp, brightness, effect, speed)
 
+    async def probe_effects(self) -> dict:
+        """Try every effect the protocol defines and record which ones the bulb
+        accepts, then persist that as this bulb's allowlist."""
+        from HueBLE import EffectType  # type: ignore
+
+        names = [e.name for e in EffectType if e is not EffectType.NONE]
+        saved = self.effects_allow
+        # Bypass any pinned allowlist while probing, otherwise effects we have
+        # not tried yet would be rejected before reaching the bulb.
+        self.effects_allow = None
+        self.state["capabilities"]["effectList"] = None
+        self.daemon.mark_dirty()
+        results: dict[str, bool] = {}
+        try:
+            for name in names:
+                try:
+                    await self.apply({"effect": name, "speed": 128})
+                    results[name] = True
+                except Exception as exc:  # noqa: BLE001 - record and continue
+                    LOG.info("effect probe %s rejected: %s", name, explain(exc))
+                    results[name] = False
+                await asyncio.sleep(0.4)
+            try:
+                await self.apply({"effect": "none"})
+            except Exception:
+                pass
+        finally:
+            working = [name for name, ok in results.items() if ok]
+            self.effects_allow = [name.upper() for name in working] or saved
+            self.state["capabilities"]["effectList"] = self.effects_allow
+            self.daemon.persist_config()
+            self.daemon.mark_dirty()
+        return results
+
     async def disconnect(self) -> None:
         async with self._lock:
             if self.light is None:
@@ -677,6 +711,10 @@ class Daemon:
                 return {"ok": False, "error": "address required"}
             bulb = await self.pair(address, request.get("label"))
             return {"ok": True, "bulb": bulb.state}
+        if cmd == "probe-effects":
+            bulb = self._find(request.get("id", ""))
+            results = await bulb.probe_effects()
+            return {"ok": True, "results": results, "bulb": bulb.state}
         if cmd == "set-effects":
             bulb = self._find(request.get("id", ""))
             requested = request.get("effects") or []

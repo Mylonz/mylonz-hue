@@ -101,7 +101,9 @@ omarchy-hue set lounge color '#ff8800'
 omarchy-hue set lounge xy 0.45 0.41
 omarchy-hue set lounge effect candle 128
 omarchy-hue effects                   # list every effect name
-omarchy-hue effects-set lounge candle sparkle glisten   # limit a bulb's picker
+omarchy-hue effects lounge            # list the effects a specific bulb offers
+omarchy-hue effects-probe lounge      # test each effect and record what the bulb accepts
+omarchy-hue effects-set lounge candle sparkle glisten   # set the list by hand
 omarchy-hue scan
 omarchy-hue pair <ADDRESS> [Name]
 omarchy-hue pair-watch <ADDRESS> [Name] --timeout 600   # retry until discoverable
@@ -134,10 +136,12 @@ omarchy-hue ensure | stop
 - `pollIntervalSec` — how often to poll a connected bulb (push updates also
   arrive from the bulb).
 - `effects` (optional, per bulb) — the effects the picker offers for this light.
-  Omit it to offer the full catalogue. Write it with
-  `omarchy-hue effects-set <id> <effect...>` (or edit the file and reload the
-  daemon); the daemon enforces it before the GATT write, so unsupported effects
-  are rejected with a clear message instead of a Bluetooth error.
+  Omit it to offer the full catalogue. Discover it with
+  `omarchy-hue effects-probe <id>` (tries each effect and records the ones the
+  bulb accepts — takes a minute or two), or set it by hand with
+  `omarchy-hue effects-set <id> <effect...>`; the daemon enforces it before the
+  GATT write, so unsupported effects are rejected with a clear message instead
+  of a Bluetooth error. `omarchy-hue effects <id>` prints the current list.
 
 The widget's own layout entry lives in `~/.config/omarchy/shell.json` like every
 other bar widget; move it with `omarchy bar move mylonz.hue --section right`.
