@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Daemon shim: runs the plugin's BLE daemon inside its own venv.
+set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+HERE="$(cd "$(dirname "$SELF")" && pwd)"
+PLUGIN_DIR="$(dirname "$HERE")"
+VENV="${OMARCHY_HUE_VENV:-$HOME/.local/share/omarchy-hue/venv}"
+PY="$VENV/bin/python"
+if [[ ! -x "$PY" ]]; then
+  echo "omarchy-hue-daemon: venv missing at $VENV (run $PLUGIN_DIR/install.sh)" >&2
+  exit 1
+fi
+exec "$PY" "$PLUGIN_DIR/daemon/hued.py" "$@"

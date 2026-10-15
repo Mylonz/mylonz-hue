@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "mylonz.hue",
+  "name": "Hue Bluetooth",
+  "version": "1.0.0",
+  "author": "mylonz",
+  "license": "MIT",
+  "description": "Control Philips Hue Bluetooth bulbs with no bridge, powered by HueBLE.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Hue Bluetooth",
+    "description": "Power, brightness, colour temperature, colour, and effects for Philips Hue Bluetooth bulbs.",
+    "category": "Home",
+    "aliases": ["hue", "hueble", "bulb", "lights"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {},
+    "schema": []
+  }
+}
