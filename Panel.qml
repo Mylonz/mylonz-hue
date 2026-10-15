@@ -87,6 +87,23 @@ Panel {
     return value === null || value === undefined ? true : value === true
   }
 
+  // Effects to offer for the selected bulb: the per-bulb allowlist the daemon
+  // learned/received, or the full catalogue when none is set. "None" is always
+  // available so an active effect can be cleared.
+  function effectChoices() {
+    var b = root.bulb
+    var allow = b && b.capabilities ? b.capabilities.effectList : null
+    if (allow && allow.length > 0) {
+      var out = ["None"]
+      for (var i = 0; i < allow.length; i++) {
+        var name = String(allow[i])
+        out.push(name.charAt(0).toUpperCase() + name.slice(1).toLowerCase())
+      }
+      return out
+    }
+    return root.effectNames
+  }
+
   function setMessage(text, isError) {
     root.message = String(text || "")
     root.messageIsError = !!isError
@@ -101,7 +118,7 @@ Panel {
     if (!b.connected) return "offline"
     var parts = [b.power ? "on" : "off"]
     if (b.power) parts.push(root.pct(b.brightness) + "%")
-    if (b.effect && root.supports("colourXy")) parts.push(b.effect.toLowerCase())
+    if (b.effect) parts.push(b.effect.toLowerCase())
     return parts.join(" · ")
   }
 
@@ -553,10 +570,10 @@ Panel {
         Column {
           width: parent.width
           spacing: Style.spacing.sm
-          // Effects only for full-colour bulbs: HueBLE's temperature-effect
-          // path is unreliable on white-ambiance bulbs (rejected writes,
-          // dropped links), while colour-bulb effects are solid.
-          visible: !!root.bulb && root.supports("effects") && root.supports("colourXy")
+          // Shown for any bulb that reports effect support. The chips come from
+          // the per-bulb allowlist when one is configured (see
+          // `omarchy-hue effects-set`), otherwise the full catalogue.
+          visible: !!root.bulb && root.supports("effects")
           enabled: root.connected
           opacity: root.connected ? 1.0 : 0.45
 
@@ -567,7 +584,7 @@ Panel {
             spacing: Style.spacing.sm
 
             Repeater {
-              model: root.effectNames
+              model: root.effectChoices()
 
               delegate: Button {
                 required property var modelData

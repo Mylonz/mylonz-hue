@@ -58,11 +58,10 @@ def explain(exc: BaseException) -> str:
             "Not bonded to the bulb. Put it in pairing mode: Hue app → Settings → "
             "Voice assistants → Make discoverable, then retry."
         )
+    if "application-specific error" in low or "0x80" in low:
+        return "The bulb rejected that command (not supported for this bulb)."
     if "unable to read" in low or "unable to write" in low or "unlikely error" in low:
-        return (
-            "Could not talk to the bulb. If this is the first connection, put it in "
-            "pairing mode (Hue app → Settings → Voice assistants → Make discoverable)."
-        )
+        return "Lost the Bluetooth link to the bulb. Retry in a moment."
     if "not found" in low or "no device" in low:
         return "Bulb not found. Power it on and move it closer, then retry."
     if "timed out" in low or "timeout" in low:
@@ -111,6 +110,15 @@ class Bulb:
         self.id = str(entry.get("id") or core.slugify_name(entry.get("name")))
         self.address = str(entry["address"]).upper()
         self.label = str(entry.get("name") or entry.get("label") or self.id)
+        raw_effects = entry.get("effects")
+        # Optional per-bulb allowlist of effects this light actually accepts.
+        # Enforced before the write so unsupported effects fail with a clear
+        # message instead of a GATT application error.
+        self.effects_allow = (
+            [str(e).upper() for e in raw_effects if str(e).strip()]
+            if isinstance(raw_effects, list) and raw_effects
+            else None
+        )
         self.light = None
         self._lock = asyncio.Lock()
         self._last_use = 0.0
@@ -142,6 +150,7 @@ class Bulb:
                 "colourTemp": None,
                 "colourXy": None,
                 "effects": None,
+                "effectList": self.effects_allow,
             },
         }
 
@@ -198,6 +207,7 @@ class Bulb:
                 "colourTemp": bool(getattr(light, "supports_colour_temp", False)),
                 "colourXy": bool(getattr(light, "supports_colour_xy", False)),
                 "effects": bool(getattr(light, "supports_effects", False)),
+                "effectList": self.effects_allow,
             }
             self._synced_once = True
             label = getattr(light, "name_in_app", None) or getattr(light, "name", None)
@@ -319,6 +329,14 @@ class Bulb:
         ).upper() not in ("NONE", "OFF", "", "CLEAR")
         if effect_requested and not supported.get("effects"):
             raise ValueError("This bulb does not support effects")
+        if (
+            effect_requested
+            and self.effects_allow
+            and str(fields.get("effect")).upper() not in self.effects_allow
+        ):
+            raise ValueError(
+                f"This bulb does not support the {fields.get('effect')} effect"
+            )
         if "power" in fields:
             value = fields["power"]
             if isinstance(value, str) and value.lower() == "toggle":
@@ -453,16 +471,26 @@ class Daemon:
             if existing and existing.address == str(entry["address"]).upper():
                 existing.label = str(entry.get("name") or existing.label)
                 existing.state["label"] = existing.label
+                raw_effects = entry.get("effects")
+                existing.effects_allow = (
+                    [str(e).upper() for e in raw_effects if str(e).strip()]
+                    if isinstance(raw_effects, list) and raw_effects
+                    else None
+                )
+                existing.state["capabilities"]["effectList"] = existing.effects_allow
                 rebuilt[entry["id"]] = existing
             else:
                 rebuilt[entry["id"]] = Bulb(self, entry)
         self.bulbs = rebuilt
 
     def persist_config(self) -> None:
-        self.cfg["bulbs"] = [
-            {"id": b.id, "address": b.address, "name": b.label}
-            for b in self.bulbs.values()
-        ]
+        bulbs = []
+        for bulb in self.bulbs.values():
+            entry = {"id": bulb.id, "address": bulb.address, "name": bulb.label}
+            if bulb.effects_allow:
+                entry["effects"] = [e.lower() for e in bulb.effects_allow]
+            bulbs.append(entry)
+        self.cfg["bulbs"] = bulbs
         core.save_config(self.cfg)
 
     # -- state snapshot
@@ -648,6 +676,16 @@ class Daemon:
             if not address:
                 return {"ok": False, "error": "address required"}
             bulb = await self.pair(address, request.get("label"))
+            return {"ok": True, "bulb": bulb.state}
+        if cmd == "set-effects":
+            bulb = self._find(request.get("id", ""))
+            requested = request.get("effects") or []
+            bulb.effects_allow = (
+                [str(e).upper() for e in requested if str(e).strip()] or None
+            )
+            bulb.state["capabilities"]["effectList"] = bulb.effects_allow
+            self.persist_config()
+            self.mark_dirty()
             return {"ok": True, "bulb": bulb.state}
         if cmd == "remove":
             await self.remove(request.get("id", ""))

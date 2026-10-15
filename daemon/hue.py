@@ -228,6 +228,14 @@ def cmd_effects(args) -> int:
     return 0
 
 
+def cmd_effects_set(args) -> int:
+    reply = call({"cmd": "set-effects", "id": args.id, "effects": args.effects})
+    bulb = reply.get("bulb") or {}
+    allow = (bulb.get("capabilities") or {}).get("effectList")
+    print(f"{args.id}: effects = {allow if allow else '(all)'}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="omarchy-hue", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -284,6 +292,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("effects", help="list effect names")
     p.set_defaults(func=cmd_effects)
+
+    p = sub.add_parser(
+        "effects-set", help="limit a bulb to the effects it actually supports"
+    )
+    p.add_argument("id")
+    p.add_argument("effects", nargs="*", help="effect names; omit to allow all")
+    p.set_defaults(func=cmd_effects_set)
 
     return parser
 

@@ -15,13 +15,17 @@ the selected bulb.
 - Colour temperature (2000–6500 K, per-bulb mireds range)
 - Colour (XY, via a row of presets) — full-colour bulbs only
 - Effects (candle, fireplace, prism, sparkle, opal, glisten, underwater,
-  cosmos, sunbeam, enchant) — full-colour bulbs only
+  cosmos, sunbeam, enchant) — for bulbs that support them
 - Multiple bulbs: a chip row appears when more than one is configured
 
 The daemon polls each bulb's capabilities and the popup only shows the controls
 that bulb actually has. A white-ambiance filament bulb, for example, exposes
-brightness and colour temperature but no colour, so the swatch row and the
-effects row stay hidden.
+brightness and colour temperature but no colour, so the swatch row stays hidden.
+
+Not every effect works on every bulb — the bulb itself rejects unsupported ones
+with a GATT application error. The optional per-bulb `effects` allowlist (below)
+pins the list a light actually accepts, and the picker shows only those chips
+plus **None**.
 
 ## Requirements
 
@@ -96,6 +100,8 @@ omarchy-hue set lounge temp 2700      # Kelvin, or <1000 as mireds
 omarchy-hue set lounge color '#ff8800'
 omarchy-hue set lounge xy 0.45 0.41
 omarchy-hue set lounge effect candle 128
+omarchy-hue effects                   # list every effect name
+omarchy-hue effects-set lounge candle sparkle glisten   # limit a bulb's picker
 omarchy-hue scan
 omarchy-hue pair <ADDRESS> [Name]
 omarchy-hue pair-watch <ADDRESS> [Name] --timeout 600   # retry until discoverable
@@ -113,7 +119,12 @@ omarchy-hue ensure | stop
   "idleDisconnectSec": 300,
   "pollIntervalSec": 30,
   "bulbs": [
-    { "id": "lounge", "address": "AA:BB:CC:DD:EE:FF", "name": "Lounge" }
+    {
+      "id": "lounge",
+      "address": "AA:BB:CC:DD:EE:FF",
+      "name": "Lounge",
+      "effects": ["candle", "sparkle", "glisten"]
+    }
   ]
 }
 ```
@@ -122,6 +133,11 @@ omarchy-hue ensure | stop
   bulb/radio power; `0` keeps it connected.
 - `pollIntervalSec` — how often to poll a connected bulb (push updates also
   arrive from the bulb).
+- `effects` (optional, per bulb) — the effects the picker offers for this light.
+  Omit it to offer the full catalogue. Write it with
+  `omarchy-hue effects-set <id> <effect...>` (or edit the file and reload the
+  daemon); the daemon enforces it before the GATT write, so unsupported effects
+  are rejected with a clear message instead of a Bluetooth error.
 
 The widget's own layout entry lives in `~/.config/omarchy/shell.json` like every
 other bar widget; move it with `omarchy bar move mylonz.hue --section right`.
@@ -162,10 +178,10 @@ safety net. Actions run the CLI, which auto-starts the daemon if needed
 - HueBLE caps brightness writes at 1–254; the UI shows a percentage.
 - Effects use HueBLE's `set_colour_effect`/`set_temperature_effect`, which also
   set brightness and colour in the same write.
-- Effects are restricted to full-colour bulbs: on white-ambiance bulbs HueBLE's
-  temperature-effect path is unreliable (some effects are rejected with a GATT
-  application error, and an active effect is not always cleared), so the row is
-  hidden there rather than offering buttons that fail.
+- Effect support is per bulb: the bulb rejects effects it does not implement
+  with a GATT application error, so the picker shows the bulb's `effects`
+  allowlist (or the full catalogue when none is set) and always offers **None**
+  to clear an active effect.
 - The daemon holds an exclusive lock, so only one instance ever owns the
   Bluetooth link; `omarchy-hue stop` waits for it to exit before returning.
 
