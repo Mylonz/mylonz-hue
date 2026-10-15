@@ -38,6 +38,10 @@ Panel {
   property bool pairManual: false
   property real dragBrightness: -1
   property real dragKelvin: -1
+  property real dragSpeed: -1
+
+  readonly property bool effectActive: !!root.bulb && !!root.bulb.effect
+    && root.bulb.effect.toLowerCase() !== "none"
 
   readonly property var bulbs: state && state.bulbs ? state.bulbs : []
   readonly property var bulb: {
@@ -102,6 +106,23 @@ Panel {
       return out
     }
     return root.effectNames
+  }
+
+  // Effect speed (Hue "effect_speed", 0-254); 128 when the bulb has not
+  // reported one. Only meaningful while an effect is running.
+  function speedOf(b) {
+    var v = b ? Number(b.effectSpeed) : NaN
+    return isFinite(v) && v > 0 ? v : 128
+  }
+
+  function speedPct(v) {
+    return Math.round(root.clamp(Number(v || 0), 0, 254) / 254 * 100)
+  }
+
+  function applyEffect(name, speed) {
+    if (!root.selectedId) return
+    root.runCommand(
+      ["set", root.selectedId, "effect", name, String(Math.round(speed))], "set")
   }
 
   function setMessage(text, isError) {
@@ -219,7 +240,11 @@ Panel {
     id: settleTimer
     interval: 1600
     repeat: false
-    onTriggered: { root.dragBrightness = -1; root.dragKelvin = -1 }
+    onTriggered: {
+    root.dragBrightness = -1
+    root.dragKelvin = -1
+    root.dragSpeed = -1
+  }
   }
 
   Process {
@@ -595,7 +620,34 @@ Panel {
                 selected: root.bulb && root.bulb.effect
                   ? root.bulb.effect.toLowerCase() === modelData.toLowerCase()
                   : modelData.toLowerCase() === "none"
-                onClicked: root.runCommand(["set", root.selectedId, "effect", modelData], "set")
+                onClicked: root.applyEffect(modelData, root.speedOf(root.bulb))
+              }
+            }
+          }
+
+          // Speed only means something while an effect is running.
+          Column {
+            width: parent.width
+            spacing: Style.spacing.sm
+            visible: root.effectActive
+
+            SectionRow {
+              title: "Speed"
+              value: root.speedPct(root.dragSpeed >= 0 ? root.dragSpeed : root.speedOf(root.bulb)) + "%"
+            }
+
+            PanelSlider {
+              width: parent.width
+              bar: root.bar
+              minimum: 1
+              maximum: 254
+              integer: true
+              value: root.dragSpeed >= 0 ? root.dragSpeed : root.speedOf(root.bulb)
+              onMoved: root.dragSpeed = value
+              onReleased: {
+                root.dragSpeed = value
+                root.applyEffect(root.bulb && root.bulb.effect ? root.bulb.effect : "none", value)
+                settleTimer.restart()
               }
             }
           }

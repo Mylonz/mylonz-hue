@@ -312,6 +312,8 @@ class Bulb:
         if "effect" in fields:
             raw = str(fields["effect"] or "NONE").upper()
             s["effect"] = None if raw in ("NONE", "OFF", "", "CLEAR") else raw
+            if raw not in ("NONE", "OFF", "", "CLEAR") and "speed" in fields:
+                s["effectSpeed"] = max(1, min(254, int(fields["speed"] or 128)))
         s["updated"] = time.time()
 
     async def _apply_locked(self, light, fields: dict) -> None:
@@ -370,7 +372,7 @@ class Bulb:
                 effect = EffectType[raw]
             except KeyError as exc:
                 raise ValueError(f"unknown effect {raw!r}") from exc
-        speed = int(fields.get("speed", 128))
+        speed = max(1, min(254, int(fields.get("speed", 128) or 128)))
         brightness = int(fields.get("brightness") or light.brightness or 128)
         xy = light.colour_xy
         if xy is not None:

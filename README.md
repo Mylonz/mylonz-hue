@@ -16,6 +16,7 @@ the selected bulb.
 - Colour (XY, via a row of presets) — full-colour bulbs only
 - Effects (candle, fireplace, prism, sparkle, opal, glisten, underwater,
   cosmos, sunbeam, enchant) — for bulbs that support them
+- Effect speed (0–254) — a slider that appears while an effect is running
 - Multiple bulbs: a chip row appears when more than one is configured
 
 The daemon polls each bulb's capabilities and the popup only shows the controls
@@ -99,7 +100,7 @@ omarchy-hue set lounge brightness 200 # 1–254 or "50%"
 omarchy-hue set lounge temp 2700      # Kelvin, or <1000 as mireds
 omarchy-hue set lounge color '#ff8800'
 omarchy-hue set lounge xy 0.45 0.41
-omarchy-hue set lounge effect candle 128
+omarchy-hue set lounge effect candle 128   # effect name, then speed 0-254
 omarchy-hue effects                   # list every effect name
 omarchy-hue effects lounge            # list the effects a specific bulb offers
 omarchy-hue effects-probe lounge      # test each effect and record what the bulb accepts
@@ -186,6 +187,9 @@ safety net. Actions run the CLI, which auto-starts the daemon if needed
   with a GATT application error, so the picker shows the bulb's `effects`
   allowlist (or the full catalogue when none is set) and always offers **None**
   to clear an active effect.
+- Effect speed is Hue's `effect_speed` (0–254); the panel shows it as a
+  percentage and only while an effect is active. Switching effect chips keeps
+  the current speed.
 - The daemon holds an exclusive lock, so only one instance ever owns the
   Bluetooth link; `omarchy-hue stop` waits for it to exit before returning.
 
