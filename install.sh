@@ -17,20 +17,26 @@ echo "==> venv:    $VENV"
 
 mkdir -p "$DATA_DIR" "$BIN_DIR"
 
+REQUIREMENTS="$PLUGIN_DIR/requirements.txt"
+
 if [[ ! -x "$VENV/bin/python" ]]; then
   if command -v uv >/dev/null 2>&1; then
     uv venv "$VENV"
-    uv pip install --python "$VENV/bin/python" --quiet HueBLE
   else
     python3 -m venv "$VENV"
     "$VENV/bin/python" -m pip install --quiet --upgrade pip
-    "$VENV/bin/python" -m pip install --quiet HueBLE
   fi
-else
-  echo "==> venv already present (skipping install)"
 fi
 
-"$VENV/bin/python" -c 'import HueBLE; print("==> HueBLE", HueBLE.__version__ if hasattr(HueBLE, "__version__") else "ready")' 2>/dev/null || true
+# Install/refresh the pinned dependency. Idempotent, so this also brings an
+# existing venv up to the pinned version.
+if command -v uv >/dev/null 2>&1; then
+  uv pip install --python "$VENV/bin/python" --quiet -r "$REQUIREMENTS"
+else
+  "$VENV/bin/python" -m pip install --quiet -r "$REQUIREMENTS"
+fi
+
+"$VENV/bin/python" -c 'import importlib.metadata as m; print("==> HueBLE", m.version("HueBLE"))'
 
 chmod +x "$PLUGIN_DIR/bin/omarchy-hue" "$PLUGIN_DIR/bin/omarchy-hue-daemon"
 ln -sf "$PLUGIN_DIR/bin/omarchy-hue" "$BIN_DIR/omarchy-hue"

@@ -1,0 +1,6 @@
+# Python dependency for the Hue daemon. Installed into the plugin's own venv
+# (~/.local/share/omarchy-hue/venv) by install.sh.
+#
+# Pinned so a redeploy is reproducible. Bump deliberately, then re-test
+# pairing, brightness, colour temperature, effects and speed.
+HueBLE==2.2.3

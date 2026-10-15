@@ -33,6 +33,9 @@ plus **None**.
 - Omarchy 4.x (Quickshell shell) with Bluetooth running
 - A Philips Hue **Bluetooth** bulb (the bridge/Zigbee models are not BLE)
 - `uv` **or** Python 3.11+ with `venv` (the installer creates its own venv)
+- The Python dependency ([`HueBLE`](https://pypi.org/project/HueBLE/)) is pinned
+  in `requirements.txt` and installed into that venv — it is a normal package,
+  not vendored into this repo
 
 ## Install
 
@@ -43,8 +46,9 @@ cd ~/.config/omarchy/plugins/mylonz.hue
 ./install.sh AA:BB:CC:DD:EE:FF "Lounge lamp"
 ```
 
-`install.sh` creates `~/.local/share/omarchy-hue/venv`, installs HueBLE into
-it, and symlinks `omarchy-hue` into `~/.local/bin`.
+`install.sh` creates `~/.local/share/omarchy-hue/venv`, installs the pinned
+`requirements.txt` (HueBLE) into it, and symlinks `omarchy-hue` into
+`~/.local/bin`. It is idempotent — re-run it to repair or upgrade the venv.
 
 Then enable the widget and restart/reload the shell:
 
@@ -206,7 +210,7 @@ into place and nudges the shell to reload.
 
 ```
 ~/Projects/mylonz-hue/                  git repo — edit here
-    Panel.qml  manifest.json
+    Panel.qml  manifest.json  requirements.txt
     daemon/  bin/  install.sh
     deploy.sh  watch.sh  Makefile
         |  ./deploy.sh   (or `make deploy` / `make watch`)
